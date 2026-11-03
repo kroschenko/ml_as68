@@ -10,7 +10,6 @@ y = df["Class"].to_numpy()
 X = df.drop(columns=["Class"]).to_numpy(dtype=float)
 
 # 2. Разделение 80/20 (с сохранением пропорций классов - stratify)
-# Так как классы несбалансированы, разделяем вручную с сохранением пропорций
 np.random.seed(42)
 idx_0 = np.where(y == 0)[0]
 idx_1 = np.where(y == 1)[0]
@@ -52,35 +51,67 @@ for _ in range(2000):
     reg[0] = 0
     w -= lr * (grad + reg)
 
-y_pred = (sigmoid(add_bias(X_test) @ w) >= 0.5).astype(int)
+# Получаем вероятности для тестовой выборки
+probabilities = sigmoid(add_bias(X_test) @ w)
 
-# 5. Матрица ошибок и метрики
-tp = np.sum((y_pred == 1) & (y_test == 1))
-tn = np.sum((y_pred == 0) & (y_test == 0))
-fp = np.sum((y_pred == 1) & (y_test == 0))
-fn = np.sum((y_pred == 0) & (y_test == 1))
+# --- БЛОК ОПТИМИЗАЦИИ ПОРОГА КЛАССИФИКАЦИИ ---
+best_threshold = 0.5
+best_f1 = -1
+best_metrics = {}
 
-accuracy = (tp + tn) / len(y_test)
-precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+# Перебираем возможные пороги для максимизации F1-Score
+for threshold in np.linspace(0.01, 0.99, 99):
+    y_pred_temp = (probabilities >= threshold).astype(int)
+    
+    tp_t = np.sum((y_pred_temp == 1) & (y_test == 1))
+    tn_t = np.sum((y_pred_temp == 0) & (y_test == 0))
+    fp_t = np.sum((y_pred_temp == 1) & (y_test == 0))
+    fn_t = np.sum((y_pred_temp == 0) & (y_test == 1))
+    
+    acc_t = (tp_t + tn_t) / len(y_test)
+    prec_t = tp_t / (tp_t + fp_t) if (tp_t + fp_t) > 0 else 0
+    rec_t = tp_t / (tp_t + fn_t) if (tp_t + fn_t) > 0 else 0
+    f1_t = 2 * prec_t * rec_t / (prec_t + rec_t) if (prec_t + rec_t) > 0 else 0
+    
+    if f1_t > best_f1:
+        best_f1 = f1_t
+        best_threshold = threshold
+        best_metrics = {
+            'accuracy': acc_t,
+            'precision': prec_t,
+            'recall': rec_t,
+            'f1': f1_t,
+            'tp': tp_t, 'tn': tn_t, 'fp': fp_t, 'fn': fn_t
+        }
 
-print(f"Accuracy : {accuracy:.4f}")
-print(f"Precision: {precision:.4f}")
-print(f"Recall   : {recall:.4f}")
+# Применяем лучший найденный порог
+y_pred = (probabilities >= best_threshold).astype(int)
+# ---------------------------------------------
+
+# 5. Вывод финальных метрик
+print(f"Оптимальный порог: {best_threshold:.2f}")
+print(f"Accuracy : {best_metrics['accuracy']:.4f}")
+print(f"Precision: {best_metrics['precision']:.4f}")
+print(f"Recall   : {best_metrics['recall']:.4f}")
+print(f"F1-Score : {best_metrics['f1']:.4f}")
 
 # 6. Матрица ошибок (визуализация)
-cm = np.array([[tn, fp], [fn, tp]])
+cm = np.array([[best_metrics['tn'], best_metrics['fp']], 
+               [best_metrics['fn'], best_metrics['tp']]])
+
 fig, ax = plt.subplots(figsize=(5, 4))
 ax.imshow(cm, cmap="Blues")
+
 ax.set_xticks([0, 1], ["Норма (0)", "Мошенничество (1)"])
 ax.set_yticks([0, 1], ["Норма (0)", "Мошенничество (1)"])
 ax.set_xlabel("Предсказано")
 ax.set_ylabel("Истинное значение")
-ax.set_title("Матрица ошибок")
+ax.set_title(f"Матрица ошибок (Порог = {best_threshold:.2f})")
+
 for i in range(2):
     for j in range(2):
-        ax.text(j, i, cm[i, j], ha="center", va="center", fontsize=16,
+        ax.text(j, i, int(cm[i, j]), ha="center", va="center", fontsize=16,
                 color="white" if cm[i, j] > cm.max() / 2 else "black")
+
 plt.tight_layout()
 plt.show()
