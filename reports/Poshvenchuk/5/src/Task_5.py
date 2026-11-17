@@ -12,8 +12,10 @@ np.random.seed(52)
 # 1. Параметры
 a, b, c, d = 0.2, 0.6, 0.05, 0.6
 N_INPUTS = 10
-ITERATIONS = 500
-x = np.arange(0, 150, 0.5)
+HIDDEN_NEURONS = 4
+ITERATIONS = 3000
+LR = 0.5
+x = np.arange(0, 150, 0.1)
 y = a * np.cos(b * x) + c * np.sin(d * x)
 
 # 2. Формирование выборки
@@ -42,9 +44,9 @@ Y_test_t = torch.tensor(Y_test, dtype=torch.float32)
 class PredictorNet(nn.Module):
     def __init__(self):
         super().__init__()
-        self.hidden = nn.Linear(N_INPUTS, 4)
+        self.hidden = nn.Linear(N_INPUTS, HIDDEN_NEURONS)
         self.act = nn.Sigmoid()
-        self.output = nn.Linear(4, 1)
+        self.output = nn.Linear(HIDDEN_NEURONS, 1)
 
     def forward(self, x):
         x = self.hidden(x)
@@ -53,13 +55,13 @@ class PredictorNet(nn.Module):
 
 model = PredictorNet()
 criterion = nn.MSELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.01)
+optimizer = optim.SGD(model.parameters(), LR) 
 
 # 4. Цикл обучения
 loss_history = []
 
+model.train()
 for _ in range(ITERATIONS):
-    model.train()
     optimizer.zero_grad()
     y_pred = model(X_train_t)
     loss = criterion(y_pred, Y_train_t)
