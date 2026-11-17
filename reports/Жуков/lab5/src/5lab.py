@@ -4,7 +4,6 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from sklearn.preprocessing import MinMaxScaler
 
 torch.manual_seed(42)
 np.random.seed(42)
@@ -17,9 +16,6 @@ d = 0.2
 x = np.arange(0, 150, 0.5)  
 y = a * np.cos(b * x) + c * np.sin(d * x)
 
-scaler = MinMaxScaler()
-y_scaled = scaler.fit_transform(y.reshape(-1, 1)).flatten()
-
 WINDOW_SIZE = 8
 
 def create_dataset(data, window_size):
@@ -29,7 +25,8 @@ def create_dataset(data, window_size):
         Y.append(data[i+window_size])
     return np.array(X), np.array(Y).reshape(-1, 1)
 
-X, Y = create_dataset(y_scaled, WINDOW_SIZE)
+# Передаем сырые данные y (без скейлера)
+X, Y = create_dataset(y, WINDOW_SIZE)
 
 train_size = int(len(X) * 0.8)
 X_train, X_test = X[:train_size], X[train_size:]
@@ -78,11 +75,9 @@ with torch.no_grad():
     train_pred = model(X_train_t).numpy().flatten()
     test_pred = model(X_test_t).numpy().flatten()
 
-Y_train_orig = scaler.inverse_transform(Y_train).flatten()
-train_pred_orig = scaler.inverse_transform(train_pred.reshape(-1, 1)).flatten()
-
-Y_test_orig = scaler.inverse_transform(Y_test).flatten()
-test_pred_orig = scaler.inverse_transform(test_pred.reshape(-1, 1)).flatten()
+# Просто выпрямляем массивы (inverse_transform больше не нужен)
+Y_train_orig = Y_train.flatten()
+Y_test_orig = Y_test.flatten()
 
 # прогнозируемая функция
 plt.figure(figsize=(10, 5))
@@ -90,15 +85,14 @@ plt.figure(figsize=(10, 5))
 x_train_plot = x[WINDOW_SIZE:split_idx]
 
 plt.plot(x_train_plot, Y_train_orig, color='black', label='Эталон (train)')
-plt.plot(x_train_plot, train_pred_orig, color='blue', linestyle='--', label='Модель (train)')
+plt.plot(x_train_plot, train_pred, color='blue', linestyle='--', label='Модель (train)')
 
-plt.title("График прогнозируемой функции на участке обучения")
+plt.title("График прогнозируемой функции на участке обучения (без нормирования)")
 plt.xlabel("x")
 plt.ylabel("y")
 plt.legend()
 plt.grid(True)
 plt.show()
-
 
 plt.figure(figsize=(10, 5))
 plt.plot(loss_history, color='red')
@@ -108,7 +102,6 @@ plt.ylabel("Ошибка (MSE)")
 plt.grid(True)
 plt.show()
 
-
 # таблицы
 def print_table(orig, pred, title):
     df = pd.DataFrame({
@@ -116,8 +109,8 @@ def print_table(orig, pred, title):
         "Полученное значение": pred,
         "Отклонение": np.abs(orig - pred)
     })
-    print(f"\n--- {title} (первые 10 строк) ---")
+    print(f"\n--- {title} ---")
     print(df.head(10).round(4).to_string(index=False))
 
-print_table(Y_train_orig, train_pred_orig, "Результаты обучения")
-print_table(Y_test_orig, test_pred_orig, "Результаты прогнозирования")
+print_table(Y_train_orig, train_pred, "Результаты обучения")
+print_table(Y_test_orig, test_pred, "Результаты прогнозирования")
